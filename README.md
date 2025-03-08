@@ -19,6 +19,7 @@ initial mvp for chain-exchange integration (ie. buy any pulsechain erc20 directl
 				triggers chainX contract vault stores pHEX received
 		- PYTHON SERVER
 			listens for PULSECHAIN chainX contract transfer event from PLS to pHEX swap
+                triggers ETHEREUM chainX contract to generate/deploy wpHEX contract (if needed)
 				triggers ETHEREUM chainX contract mint wpHEX to user wallet
 
 	- Exchange wpHEX -> ETH (via pulseX bridge: pWETH -> ETH)

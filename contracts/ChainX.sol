@@ -23,7 +23,7 @@ import "./node_modules/@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Rout
 import "./node_modules/@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 
 // contract LockTest is ERC20, Ownable { // owner support
-contract LockTest is ERC20 {
+contract ChainX is ERC20 {
     /* -------------------------------------------------------- */
     /* GLOBALS
     /* -------------------------------------------------------- */
@@ -36,7 +36,7 @@ contract LockTest is ERC20 {
     address public ADDR_PAIR_INIT; // this:wpls created in constructor
 
     // init support
-    string public constant tVERSION = '0.1';
+    string public constant tVERSION = '0.0';
     string private TOK_SYMB = string(abi.encodePacked("LT", tVERSION));
     string private TOK_NAME = string(abi.encodePacked("LockTest", tVERSION));
     // string private TOK_SYMB = "TBF";
@@ -376,4 +376,100 @@ contract LockTest is ERC20 {
         }
         return _arr;
     }
+
+    /** OG from README
+        - Exchange ETH|ERC20 -> wpHEX (via pulseX bridge: eWPLS -> PLS)
+            - ETHEREUM
+                user wallet send ETH|ERC20 to chainX contract
+                    triggers chainX contract swaps ETH|ERC20 to WPLS
+                    triggers chainX contract invokes pulseX bridge contract w/ WPLS
+            - PULSECHAIN
+                chainX contract receives PLS from pulseX bridge contract
+                    triggers chainX contract swap PLS to pHEX
+                    triggers chainX contract vault stores pHEX received
+            - PYTHON SERVER
+                listens for PULSECHAIN chainX contract transfer event from PLS to pHEX swap
+                    triggers ETHEREUM chainX contract to generate/deploy wpHEX contract (if needed)
+                    triggers ETHEREUM chainX contract mint wpHEX to user wallet
+        - Exchange wpHEX -> ETH (via pulseX bridge: pWETH -> ETH)
+            - ETHEREUM
+                user wallet send wpHEX to chainX contract
+                    triggers chainX contract burns wpHEX
+            - PYTHON SERVER
+                listens for ETHEREUM transfer|burn event of wpHEX
+                    triggers PULSECHAIN chainX contract vault to swap pHEX to WETH
+                    triggers PULSECHAIN chainX contract to invoke pulseX bridge contract w/ WETH
+                listens for ETHEREUM transfer event of ETH from pulseX bridge contract (~30 min wait | ~90 txs)
+                    triggers ETHEREUM chainX contract to claim ETH from pulseX bridge contract
+                    triggers ETHEREUM chainX contract to send ETH to user wallet
+    */
+    
+    /* -------------------------------------------------------- */
+    /* PUBLIC - SUPPORTING native token sent to contract
+    /* -------------------------------------------------------- */
+    // fallback() if: function invoked doesn't exist | ETH received w/o data & no receive() exists | ETH received w/ data
+    fallback() external payable { 
+        if (block.chainid == 369 ) { // ETHEREUM mainnet
+            // - ETHEREUM
+            // 	user wallet send ETH|ERC20 to chainX contract
+            // 		triggers chainX contract swaps ETH|ERC20 to WPLS
+            // 		triggers chainX contract invokes pulseX bridge contract w/ WPLS
+
+            // legacy
+            // NOTE: at this point, the vault has the deposited stable and the vault has stored account balances
+            deposit(msg.sender, address(0x0), msg.value); // perform swap from PLS to stable & update CONFM acct balance
+        } else if (block.chainid == 369) { // PULSECHAIN mainnet
+            // - PULSECHAIN
+            // 	chainX contract receives PLS from pulseX bridge contract
+            // 		triggers chainX contract swap PLS to pHEX
+            // 		triggers chainX contract vault stores pHEX received
+
+            // legacy (ai hallucination)
+            // NOTE: at this point, the vault has the deposited stable and the vault has stored account balances
+            deposit(msg.sender, ADDR_TOK_WPLS, msg.value); // perform swap from PLS to stable & update CONFM acct balance
+        }
+
+		// - PYTHON SERVER
+		// 	listens for PULSECHAIN chainX contract transfer event from PLS to pHEX swap
+        //         triggers ETHEREUM chainX contract to generate/deploy wpHEX contract (if needed)
+		// 		triggers ETHEREUM chainX contract mint wpHEX to user wallet
+    }
+    // fallback() external payable {
+    //     // deposit(msg.sender); // emit DepositReceived
+    //     deposit(msg.sender, address(0x0), msg.value); // perform swap from PLS to stable & update CONFM acct balance
+    //     // NOTE: at this point, the vault has the deposited stable and the vault has stored account balances
+    // }
+    function deposit(address _depositor, address _altToken, uint256 _altAmnt) public payable returns(uint64) {
+        address[] memory alt_stab_path = new address[](2);
+        alt_stab_path[1] = CONF.DEPOSIT_USD_STABLE();
+        if (_altToken == address(0x0)) {
+            alt_stab_path[0] = TOK_WPLS; // note: WPLS required for 'swapExactETHForTokens'
+        } else {
+            alt_stab_path[0] = _altToken;
+        }
+
+        // perform swap from alt token to stable & log in CONFM.ACCT_USD_BALANCES (or from native PLS if _altToken == 0x0)
+        uint256 stable_amnt_out = _swap_v2_wrap(alt_stab_path, CONF.DEPOSIT_ROUTER(), _altAmnt, address(this), _altToken == address(0x0)); // 0x0 = true = fromETH        
+        uint64 stableAmntOut = _norm_uint64_from_uint256(IERC20x(alt_stab_path[1]).decimals(), stable_amnt_out, _usd_decimals());
+        CONFM.edit_ACCT_USD_BALANCES(_depositor, stableAmntOut, true); // true = add
+
+        // emit DepositReceived(_depositor, _altAmnt, stableAmntOut);
+        emit DepositReceived(_depositor, _altToken, _altAmnt, stableAmntOut);
+        
+        return stableAmntOut;
+
+        // NOTE: at this point, the vault has the deposited stable and the vault has stored account balances
+    }
+    // fallback() external payable { // _override from CONFIG.sol_
+    //     // executes if:
+    //     //  function invoked doesn't exist
+    //     //   or ETH received w/ data 
+    //     //   or ETH received w/o data & no receive() exists
+        
+    //     // fwd any PLS recieved to treasury
+    //     payable(ADDR_TREAS_EOA).transfer(msg.value);
+
+    //     // legacy: fwd any PLS recieved to VAULT (convert to USD stable & process deposit)
+    //     // ICallitVault(ADDR_VAULT).deposit{value: msg.value}(msg.sender);
+    // }
 }
