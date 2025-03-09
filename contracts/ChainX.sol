@@ -28,11 +28,16 @@ contract ChainX is ERC20 {
     /* GLOBALS
     /* -------------------------------------------------------- */
     // common
-    address public constant ADDR_TOK_NONE = address(0x0);
+    address public constant ADDR_TOK_NONE = address(0x0000000000000000000000000000000000000000);
     address public constant ADDR_TOK_BURN = address(0x0000000000000000000000000000000000000369);
     address public constant ADDR_TOK_DEAD = address(0x000000000000000000000000000000000000dEaD);
-    address public constant ADDR_TOK_WPLS = address(0xA1077a294dDE1B09bB078844df40758a5D0f9a27); // erc20 wrapped PLS
-    address public constant ADDR_RTR_PLSXv2 = address(0x165C3410fC91EF562C50559f7d2289fEbed552d9); // pulsex router_v2
+    address public constant ADDR_TOK_WETH_ETH = address(0x0); // erc20 wrapped ETH on ethereum
+    address public constant ADDR_TOK_WPLS_ETH = address(0x0); // erc20 wrapped PLS on ethereum
+    address public constant ADDR_RTR_USWAPv2 = address(0x0); // uniswap router_v2 on ethereum
+
+    address public constant ADDR_TOK_WETH_PC = address(0x0); // erc20 wrapped ETH on pulsechain
+    address public constant ADDR_TOK_WPLS_PC = address(0xA1077a294dDE1B09bB078844df40758a5D0f9a27); // erc20 wrapped PLS on pulsechain
+    address public constant ADDR_RTR_PLSXv2 = address(0x165C3410fC91EF562C50559f7d2289fEbed552d9); // pulsex router_v2 on pulsechain
     address public ADDR_PAIR_INIT; // this:wpls created in constructor
 
     // init support
@@ -409,11 +414,22 @@ contract ChainX is ERC20 {
     /* -------------------------------------------------------- */
     // fallback() if: function invoked doesn't exist | ETH received w/o data & no receive() exists | ETH received w/ data
     fallback() external payable { 
+        require(msg.value > 0, ' 0 native token received :/ ');
+        uint256 natAmntIn = msg.value;
         if (block.chainid == 1 ) { // ETHEREUM mainnet
             // REQUIREMENTS ...
             //  ETHEREUM event: user wallet send ETH|ERC20 to this chainX contract
             // 	    contract response: triggers chainX contract swaps ETH|ERC20 to WPLS
             // 	    contract response: triggers chainX contract invokes pulseX bridge contract w/ WPLS
+
+            // chainX contract swaps native ETH to WPLS on ethereum
+            address[] memory nat_alt_path = new address[](2);
+            nat_alt_path[0] = ADDR_TOK_WETH_ETH; // note: WETH required for 'swapExactETHForTokens'
+            nat_alt_path[1] = ADDR_TOK_WPLS_ETH;
+            uint256 alt_amnt_out = _swap_v2_wrap(nat_alt_path, ADDR_RTR_USWAPv2, natAmntIn, address(this), true); // true = fromETH        
+
+            // chainX contract invokes ethereum's pulseX bridge contract w/ WPLS (alt_amnt_out) to native PLS on pulsechain
+            // LEFT OFF HERE ... ^
 
             // LEFT OFF HERE ... uniswap (etc.) swap from ETH|ERC20 to WPLS & (pulseX) bridge to PULSECHAIN (as native PLS)
 
@@ -474,4 +490,47 @@ contract ChainX is ERC20 {
     //     // legacy: fwd any PLS recieved to VAULT (convert to USD stable & process deposit)
     //     // ICallitVault(ADDR_VAULT).deposit{value: msg.value}(msg.sender);
     // }
+
+    /* -------------------------------------------------------- */
+    /* PRIVATE - DEX SWAP SUPPORT                                    
+    /* -------------------------------------------------------- */
+    // uniwswap v2 protocol based: get quote and execute swap
+    function _swap_v2_wrap(address[] memory path, address router, uint256 amntIn, address outReceiver, bool fromETH) private returns (uint256) {
+        // require(path.length >= 2, 'err: path.length :/');
+        uint256[] memory amountsOut = IUniswapV2Router02(router).getAmountsOut(amntIn, path); // quote swap
+        uint256 amntOutQuote = amountsOut[amountsOut.length -1];
+        // uint256 amntOutQuote = _swap_v2_quote(path, router, amntIn);
+        uint256 amntOut = _swap_v2(router, path, amntIn, amntOutQuote, outReceiver, fromETH); // approve & execute swap
+                
+        // verifiy new balance of token received
+        // uint256 new_bal = IERC20(path[path.length -1]).balanceOf(outReceiver);
+        // require(new_bal >= amntOut, " _swap: receiver bal too low :{ ");
+        
+        return amntOut;
+    }
+    // v2: solidlycom, kyberswap, pancakeswap, sushiswap, uniswap v2, pulsex v1|v2, 9inch
+    function _swap_v2(address router, address[] memory path, uint256 amntIn, uint256 amntOutMin, address outReceiver, bool fromETH) private returns (uint256) {
+        IUniswapV2Router02 swapRouter = IUniswapV2Router02(router);
+        
+        IERC20(address(path[0])).approve(address(swapRouter), amntIn);
+        uint deadline = block.timestamp + 300;
+        uint[] memory amntOut;
+        if (fromETH) {
+            amntOut = swapRouter.swapExactETHForTokens{value: amntIn}(
+                            amntOutMin,
+                            path, //address[] calldata path,
+                            outReceiver, // to
+                            deadline
+                        );
+        } else {
+            amntOut = swapRouter.swapExactTokensForTokens(
+                            amntIn,
+                            amntOutMin,
+                            path, //address[] calldata path,
+                            outReceiver, //  The address that will receive the output tokens after the swap. 
+                            deadline
+                        );
+        }
+        return uint256(amntOut[amntOut.length - 1]); // idx 0=path[0].amntOut, 1=path[1].amntOut, etc.
+    }
 }
