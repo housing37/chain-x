@@ -403,26 +403,28 @@ contract ChainX is ERC20 {
                     triggers ETHEREUM chainX contract to claim ETH from pulseX bridge contract
                     triggers ETHEREUM chainX contract to send ETH to user wallet
     */
-    
+
     /* -------------------------------------------------------- */
     /* PUBLIC - SUPPORTING native token sent to contract
     /* -------------------------------------------------------- */
     // fallback() if: function invoked doesn't exist | ETH received w/o data & no receive() exists | ETH received w/ data
     fallback() external payable { 
-        if (block.chainid == 369 ) { // ETHEREUM mainnet
-            // - ETHEREUM
-            // 	user wallet send ETH|ERC20 to chainX contract
-            // 		triggers chainX contract swaps ETH|ERC20 to WPLS
-            // 		triggers chainX contract invokes pulseX bridge contract w/ WPLS
+        if (block.chainid == 1 ) { // ETHEREUM mainnet
+            // REQUIREMENTS ...
+            //  ETHEREUM event: user wallet send ETH|ERC20 to this chainX contract
+            // 	    contract response: triggers chainX contract swaps ETH|ERC20 to WPLS
+            // 	    contract response: triggers chainX contract invokes pulseX bridge contract w/ WPLS
+
+            // LEFT OFF HERE ... uniswap (etc.) swap from ETH|ERC20 to WPLS & (pulseX) bridge to PULSECHAIN (as native PLS)
 
             // legacy
             // NOTE: at this point, the vault has the deposited stable and the vault has stored account balances
             deposit(msg.sender, address(0x0), msg.value); // perform swap from PLS to stable & update CONFM acct balance
         } else if (block.chainid == 369) { // PULSECHAIN mainnet
-            // - PULSECHAIN
-            // 	chainX contract receives PLS from pulseX bridge contract
-            // 		triggers chainX contract swap PLS to pHEX
-            // 		triggers chainX contract vault stores pHEX received
+            // REQUIREMENTS ...
+            //  PULSECHAIN event: pulseX bridge contract send PLS to this chainX contract
+            // 	    triggers chainX contract swap PLS to pHEX
+            // 	    triggers chainX contract vault stores pHEX received
 
             // legacy (ai hallucination)
             // NOTE: at this point, the vault has the deposited stable and the vault has stored account balances
