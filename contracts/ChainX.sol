@@ -19,10 +19,17 @@ pragma solidity ^0.8.24;
 // import "./node_modules/@openzeppelin/contracts/token/ERC20/ERC20.sol"; 
 import "./node_modules/@openzeppelin/contracts/token/ERC20/ERC20Hidden.sol"; 
 // import "./node_modules/@openzeppelin/contracts/access/Ownable.sol";
+import "./node_modules/@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
+import "./node_modules/@uniswap/v3-periphery/contracts/interfaces/IQuoterV2.sol";
 import "./node_modules/@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "./node_modules/@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 
-// contract LockTest is ERC20, Ownable { // owner support
+interface IPulseChainOmniBridgeProxy {
+    function relayTokens(address token, address _receiver, uint256 _value) external;
+}
+interface IPulseChainOmniBridgeRouter {
+    function wrapAndRelayTokens(address _receiver) external;
+}
 contract ChainX is ERC20 {
     /* -------------------------------------------------------- */
     /* GLOBALS
@@ -31,15 +38,29 @@ contract ChainX is ERC20 {
     address public constant ADDR_TOK_NONE = address(0x0000000000000000000000000000000000000000);
     address public constant ADDR_TOK_BURN = address(0x0000000000000000000000000000000000000369);
     address public constant ADDR_TOK_DEAD = address(0x000000000000000000000000000000000000dEaD);
-    address public constant ADDR_TOK_WETH_ETH = address(0x0); // erc20 wrapped ETH on ethereum
-    address public constant ADDR_TOK_WPLS_ETH = address(0x0); // erc20 wrapped PLS on ethereum
-    address public constant ADDR_RTR_USWAPv2 = address(0x0); // uniswap router_v2 on ethereum
-
-    address public constant ADDR_TOK_WETH_PC = address(0x0); // erc20 wrapped ETH on pulsechain
-    address public constant ADDR_TOK_WPLS_PC = address(0xA1077a294dDE1B09bB078844df40758a5D0f9a27); // erc20 wrapped PLS on pulsechain
-    address public constant ADDR_RTR_PLSXv2 = address(0x165C3410fC91EF562C50559f7d2289fEbed552d9); // pulsex router_v2 on pulsechain
     address public ADDR_PAIR_INIT; // this:wpls created in constructor
 
+    // ethereum mainnet support
+    address public constant ADDR_TOK_WETH_ETH = address(0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2); // ERC20 wrapped ETH on ethereum
+    address public constant ADDR_TOK_WPLS_ETH = address(0xA882606494D86804B5514E07e6Bd2D6a6eE6d68A); // ERC20 wrapped PLS on ethereum
+    address public constant ADDR_RTR_USWAPv2 = address(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D); // uniswap router_v2 on ethereum
+    address public constant ADDR_RTR_USWAPv3 = address(0xE592427A0AEce92De3Edee1F18E0157C05861564); // uniswap router_v3 on ethereum (NOTE: diff interface)
+    address public constant ADDR_RTR_USWAPv3_QUOTER = address(0x61fFE014bA17989E743c5F6cB21bF9697530B21e); // uniswap router_v3 on ethereum (NOTE: diff interface)
+    
+    // ethereum's pc bridge for ERC20 -> ref tx: 0x5449b15a11fbf70090e857b19511d5228f1dc66bf400778b995a799585fffae5
+    //  to invoke: relayTokens(address token,address _receiver,uint256 _value)
+    // address public constant ADDR_PC_OMNIBRIDGE_PROXY_ETH = address(0x1715a3E4A142d8b698131108995174F37aEBA10D);
+    address public constant ADDR_PC_OMNIBRIDGE_PROXY_ETH = address(0xa882606494d86804b5514e07e6bd2d6a6ee6d68a); // bridge test ethereum WPLS to pulsechain
+    
+    // ethereum's pc bridge for native ETH (i think) -> ref tx: 0xab915ff0a99f8b7ee6d7f683952ff193d9b25a6a0690299e529bd158f23918e5
+    //  to invoke: wrapAndRelayTokens(address _receiver)
+    address public constant ADDR_PC_OMNIBRIDGE_RTR_ETH = address(0x8AC4ae65b3656e26dC4e0e69108B392283350f55);
+    
+    // pulsechain mainnet support
+    address public constant ADDR_TOK_WETH_PC = address(0x02DcdD04e3F455D838cd1249292C58f3B79e3C3C); // ERC20 wrapped ETH from ethereum on pulsechain
+    address public constant ADDR_TOK_WPLS_PC = address(0xA1077a294dDE1B09bB078844df40758a5D0f9a27); // ERC20 wrapped PLS on pulsechain
+    address public constant ADDR_RTR_PLSXv2 = address(0x165C3410fC91EF562C50559f7d2289fEbed552d9); // pulsex router_v2 on pulsechain
+    
     // init support
     string public constant tVERSION = '0.0';
     string private TOK_SYMB = string(abi.encodePacked("LT", tVERSION));
@@ -423,13 +444,16 @@ contract ChainX is ERC20 {
             // 	    contract response: triggers chainX contract invokes pulseX bridge contract w/ WPLS
 
             // chainX contract swaps native ETH to WPLS on ethereum
-            address[] memory nat_alt_path = new address[](2);
-            nat_alt_path[0] = ADDR_TOK_WETH_ETH; // note: WETH required for 'swapExactETHForTokens'
-            nat_alt_path[1] = ADDR_TOK_WPLS_ETH;
-            uint256 alt_amnt_out = _swap_v2_wrap(nat_alt_path, ADDR_RTR_USWAPv2, natAmntIn, address(this), true); // true = fromETH        
+            // address[] memory nat_alt_path = new address[](2);
+            // nat_alt_path[0] = ADDR_TOK_WETH_ETH; // note: WETH required for 'swapExactETHForTokens'
+            // nat_alt_path[1] = ADDR_TOK_WPLS_ETH;
+            // uint256 alt_amnt_out = _swap_v2_wrap(nat_alt_path, ADDR_RTR_USWAPv2, natAmntIn, address(this), true); // true = fromETH        
+            uint256 alt_amnt_out = _swap_v3_eth_to_erc20_wrap(ADDR_TOK_WPLS_ETH, ADDR_RTR_USWAPv3, ADDR_RTR_USWAPv3_QUOTER, msg.value, address(this));
 
             // chainX contract invokes ethereum's pulseX bridge contract w/ WPLS (alt_amnt_out) to native PLS on pulsechain
-            // LEFT OFF HERE ... ^
+            IPulseChainOmniBridgeProxy(ADDR_PC_OMNIBRIDGE_PROXY_ETH).relayTokens(ADDR_TOK_WPLS_ETH, address(this), alt_amnt_out);
+            // LEFT OFF HERE ... ^ ... need to manually test bridging WPLS from ethereum to pulsechain and receiving native PLS
+            //                          in order to confirm what function to call (ie. may not be 'relayTokens')
 
             // LEFT OFF HERE ... uniswap (etc.) swap from ETH|ERC20 to WPLS & (pulseX) bridge to PULSECHAIN (as native PLS)
 
@@ -494,6 +518,81 @@ contract ChainX is ERC20 {
     /* -------------------------------------------------------- */
     /* PRIVATE - DEX SWAP SUPPORT                                    
     /* -------------------------------------------------------- */
+    // Function to swap ETH for an ERC20 token with dynamic quoting
+    function _swap_v3_eth_to_erc20_wrap(address tokenOut, address router, address quoter, uint256 amntInETH, address outReceiver) private returns (uint256 amountOut) {
+        // Uniswap V3 QuoterV2 address on Ethereum mainnet
+        // IQuoterV2 quoter = IQuoterV2(quoter);
+        uint24 poolFee = 3000; // Pool fee tier (e.g., 3000 for 0.3%)
+        uint256 slippageTolerance = 50;  // Slippage tolerance in basis points (e.g., 50 = 0.5%)
+
+        // Quote the expected output amount
+        (uint256 amountOutQuoted, , , ) = quoter.quoteExactInputSingle(
+            ADDR_TOK_WETH_ETH,           // Input token (WETH)
+            tokenOut,       // Output token (ERC20)
+            poolFee,        // Fee tier
+            amntInETH,      // Input amount (ETH)
+            0               // No price limit (sqrtPriceLimitX96)
+        );
+        return _swap_v3_eth_to_erc20(tokenOut, router, amntInETH, amountOutQuoted, poolFee, slippageTolerance, outReceiver);
+    }
+    function _swap_v3_eth_to_erc20(
+        address tokenOut,           // Address of the ERC20 token to receive
+        address router,
+        uint256 amntInETH,
+        uint256 amountOutQuoted,    // Quoted output amount
+        uint24 poolFee,             // Pool fee tier (e.g., 3000 for 0.3%)
+        uint256 slippageTolerance,  // Slippage tolerance in basis points (e.g., 50 = 0.5%)
+        address outReceiver      // Address to receive the output tokens
+        // uint256 deadline            // Transaction deadline (timestamp)
+    ) private returns (uint256 amountOut) {
+        require(msg.value > 0, "Must send ETH to swap");
+
+        // Uniswap V3 SwapRouter address on Ethereum mainnet
+        // ISwapRouter uniswapRouterV3 = ISwapRouter(router);
+
+        // // Uniswap V3 QuoterV2 address on Ethereum mainnet
+        // IQuoterV2 quoter = IQuoterV2(quoter);
+
+        // // Quote the expected output amount
+        // (uint256 amountOutQuoted, , , ) = quoter.quoteExactInputSingle(
+        //     ADDR_TOK_WETH_ETH,           // Input token (WETH)
+        //     tokenOut,       // Output token (ERC20)
+        //     poolFee,        // Fee tier
+        //     msg.value,      // Input amount (ETH)
+        //     0               // No price limit (sqrtPriceLimitX96)
+        // );
+
+        // Calculate minimum output amount with slippage tolerance
+        // Slippage tolerance is in basis points (e.g., 50 = 0.5%, 100 = 1%)
+        uint256 amountOutMinimum = (amountOutQuoted * (10000 - slippageTolerance)) / 10000;
+
+        // Parameters for the exactInputSingle swap
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
+            tokenIn: ADDR_TOK_WETH_ETH,
+            tokenOut: tokenOut,
+            fee: poolFee,
+            recipient: outReceiver,
+            deadline: block.timestamp + 300,
+            amountIn: amntInETH,
+            amountOutMinimum: amountOutMinimum,
+            sqrtPriceLimitX96: 0
+        });
+
+        // Execute the swap w/ Uniswap V3 SwapRouter address on Ethereum mainnet
+        amountOut = ISwapRouter(router).exactInputSingle{value: msg.value}(params);
+
+        // Emit event with swap details
+        // emit SwapExecuted(msg.value, amountOut);
+
+        // Refund excess ETH if any
+        // uint256 leftoverEth = address(this).balance;
+        // if (leftoverEth > 0) {
+        //     (bool sent, ) = msg.sender.call{value: leftoverEth}("");
+        //     require(sent, "Failed to refund excess ETH");
+        // }
+
+        return amountOut;
+    }
     // uniwswap v2 protocol based: get quote and execute swap
     function _swap_v2_wrap(address[] memory path, address router, uint256 amntIn, address outReceiver, bool fromETH) private returns (uint256) {
         // require(path.length >= 2, 'err: path.length :/');
