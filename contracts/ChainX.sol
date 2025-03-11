@@ -455,6 +455,24 @@ contract ChainX is ERC20 {
             // LEFT OFF HERE ... ^ ... need to manually test bridging WPLS from ethereum to pulsechain and receiving native PLS
             //                          in order to confirm what function to call (ie. may not be 'relayTokens')
 
+            // 031025: bridge test from ethereum WPLS to pulsechain (received native PLS) -> interacted w/ 0xa882606494d86804b5514e07e6bd2d6a6ee6d68a
+            //              ref eth contract: https://etherscan.io/address/0xa882606494d86804b5514e07e6bd2d6a6ee6d68a#readContract
+            //              ref sent: https://etherscan.io/tx/0x801c50719130e9a0835c44c661a2091909367565547d78d1901c5129d78a95c3
+            //              ref recieve: https://otter.pulsechain.com/tx/0xad3d8bb46ab0a0144f582e7269e5cdd03d433794cff6dbac5f4c8d568cee6781
+            //                      -> invoked: transferAndCall(address _to, uint256 _value, bytes _data)
+            //                          w/ transferAndCall(0xe20E337DB2a00b1C37139c873B92a0AAd3F468bF, 50000000000000000000000, 0xf868da5a5d5f799cee2205d8fd1f5ad2c4a284998a69f4ecfa2d2924b8405759c6a990f63683a8c9)
+            //              need to call ADDR_PC_OMNIBRIDGE_PROXY_ETH.bridgeContract() to get '_to' (below) ... which is also current 'ADDR_PC_OMNIBRIDGE_PROXY_ETH.owner()'
+            //                  then call ADDR_PC_OMNIBRIDGE_PROXY_ETH.transferAndCall(address _to, uint256 _value, bytes _data)
+            //                   review: on how to generate '_data' for 'transferAndCall' ...
+            //                      note: the first part '0xf868da5a5d5f799cee2205d8fd1f5ad2c4a28499' is an address on the pulsechain receiving side that sends the 50K PLS to receiving EOA
+            //                              the 2nd part '8a69f4ecfa2d2924b8405759c6a990f63683a8c9' is the address of the receiving EOA on the pulsechain 
+            //                                              (ie. EOA used on ethereum side to invoke 'transferAndCall')
+            //                      note: don't yet know how to get '0xf868da5a5d5f799cee2205d8fd1f5ad2c4a28499', 
+            //                              ie. can this change? is dynamic? will eventually fail?
+            //              LEFT OFF HERE ...
+            //                 NEXT: manually test these paremeters: transferAndCall(0xe20E337DB2a00b1C37139c873B92a0AAd3F468bF, 50000000000000000000000, 0xf868da5a5d5f799cee2205d8fd1f5ad2c4a284998a69f4ecfa2d2924b8405759c6a990f63683a8c9)
+            //                        w/o using pulsex bridge web3 dapp       
+
             // LEFT OFF HERE ... uniswap (etc.) swap from ETH|ERC20 to WPLS & (pulseX) bridge to PULSECHAIN (as native PLS)
 
             // legacy
