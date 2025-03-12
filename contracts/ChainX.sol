@@ -473,6 +473,29 @@ contract ChainX is ERC20 {
             //                 NEXT: manually test these paremeters: transferAndCall(0xe20E337DB2a00b1C37139c873B92a0AAd3F468bF, 50000000000000000000000, 0xf868da5a5d5f799cee2205d8fd1f5ad2c4a284998a69f4ecfa2d2924b8405759c6a990f63683a8c9)
             //                        w/o using pulsex bridge web3 dapp       
 
+            // 031125: bridge test from ethereum WPLS to pulsechain (received erc20 WPLS) -> still interacted w/ 0xa882606494d86804b5514e07e6bd2d6a6ee6d68a
+            //              ref eth contract: https://etherscan.io/address/0xa882606494d86804b5514e07e6bd2d6a6ee6d68a#readContract
+            //              ref sent: https://etherscan.io/tx/0x3edc63ab82607f34539a7b95577ade17562c10fa4cfc5ae2326df162db1e0cdb
+            //              ref recieve: https://otter.pulsechain.com/tx/0x7ea1b4d160f23c4829c67c6f707424a857ef149b26bfebc6332b5d233b44c44e
+            //                      -> also invoked: transferAndCall(address _to, uint256 _value, bytes _data)
+            //                          w/ transferAndCall(0xe20E337DB2a00b1C37139c873B92a0AAd3F468bF, 1450412697781978029586918, 0xeed80539c314db19360188a66cccaf9cac887b22)
+            //                      note: same result as testing receive native PLS (above)
+            //                             but _data param was simply the receiving EOA address on pulsechain (when receiving WPLS erc20)
+            //                      NOTE: this solution, using 'transferAndCall' seems like the simplest solution to use for briding selective erc20
+            //                              however, likely requires 'approve' first
+            //                              and then use pulsechain side to swap ERC20 -> PLS -> pDAI (ie. or final bridging token)
+
+            // 031125: bridge test from ethereum native ETH to pulsechain (received erc20 WETH) -> interacted w/ 0x8AC4ae65b3656e26dC4e0e69108B392283350f55
+            //              ref eth contract: https://etherscan.io/address/0x8AC4ae65b3656e26dC4e0e69108B392283350f55
+            //              ref sent: https://etherscan.io/tx/0x9b0bb1fe501f57b4250f892e72b935587aec2579d0cb9d2b43502b85d5a171de
+            //              ref recieve: https://otter.pulsechain.com/tx/0xdabf888acbd8076aa31f929dddbff1e1b3da52eff01ab5508094fa56ff880d3a
+            //                      -> invoked: wrapAndRelayTokens(address _receiver) | wrapAndRelayTokens() -> invokes wrapAndRelayTokens(msg.sender)
+            //                          w/ wrapAndRelayTokens(0xeed80539c314db19360188a66cccaf9cac887b22) -> using msg.value for native ETH sent over
+            //                      note: same result as testing receive WPLS erc20 (above) 
+            //                              -> simply received WETH erc20 on pulsechain to receiver EOA address input
+            //                      NOTE: this solution, using 'wrapAndRelayTokens' seems like the simplest solution to use
+            //                              and then simply use pulsechain side to swap WETH -> PLS -> pDAI (ie. or final bridging token)
+
             // LEFT OFF HERE ... uniswap (etc.) swap from ETH|ERC20 to WPLS & (pulseX) bridge to PULSECHAIN (as native PLS)
 
             // legacy
